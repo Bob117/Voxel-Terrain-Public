@@ -1,0 +1,30 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+#include "TerrainGenerator.cginc" 
+#include "BlockTypes.cginc" 
+
+RWStructuredBuffer<uint> _BlockBuffer;
+cbuffer _PositionBuffer
+{
+	float4 chunkPos;
+};
+
+[numthreads(1, 32, 32)]
+void CSMain(uint3 groupdID : SV_GroupID, uint3 threadID : SV_DispatchThreadID)
+{
+	uint3 blockID = uint3(groupdID.x, threadID.y, threadID.z);
+    	
+	float3 blockPos = chunkPos.xyz + blockID + uint3(1000, 1000, 1000);
+	bool isSolid = Get3DPerlinNoise(blockPos);
+    
+	if (isSolid)
+	{
+		_BlockBuffer[Convert3DIndexTo1D(blockID)] = BLOCK_STONE;
+
+	}
+    else
+	{
+		_BlockBuffer[Convert3DIndexTo1D(blockID)] = BLOCK_AIR;
+        
+	} 
+}

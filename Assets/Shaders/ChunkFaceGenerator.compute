@@ -1,0 +1,75 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+static const int CHUNK_SCALE = 32;
+static const uint NR_OF_FACES_PER_CUBE = 6;
+
+static const float3 CUBE_FACE_NORMALS[6] =
+{
+	int3(0, 0, -1), //Front
+    int3(-1, 0, 0), //Left
+    int3(1, 0, 0), //Right
+    int3(0, 1, 0), //Top
+    int3(0, -1, 0), //Button
+    int3(0, 0, 1) //Back
+};
+
+RWStructuredBuffer<uint> _BlockBuffer;
+RWStructuredBuffer<int> _FaceIndexBuffer; //Uncompressed data, need to be compressed on the CPU to match vertex shader input, -1 means that the face should not be drawn.
+
+bool BlockNeighborIsInOtherChunk(int3 neighborBlockID)
+{
+	if (neighborBlockID.x < 0 || neighborBlockID.y < 0 || neighborBlockID.z < 0 ||
+		neighborBlockID.x == CHUNK_SCALE || neighborBlockID.y == CHUNK_SCALE || neighborBlockID.z == CHUNK_SCALE)
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+uint Convert3DIndexTo1D(uint3 index)
+{
+	return index.x + CHUNK_SCALE * (index.y + CHUNK_SCALE * index.z);
+}
+
+bool ShouldFaceBeRendered(uint3 blockID, int3 faceNormal)
+{
+	int3 neighborBlockID = blockID + faceNormal;
+
+	if (BlockNeighborIsInOtherChunk(neighborBlockID))
+	{
+		return true; //For now I dont cull faces that borders other chunks, might do that in the future.
+	}
+	else
+	{
+		return _BlockBuffer[Convert3DIndexTo1D(neighborBlockID)] == 0;
+	}
+}
+
+
+[numthreads(1, 32, 32)]
+
+void CSMain(uint3 groupdID : SV_GroupID, uint3 threadID : SV_DispatchThreadID)
+{
+	uint3 blockID = uint3(groupdID.x, threadID.y, threadID.z);
+	bool isEmptyBlock = _BlockBuffer[Convert3DIndexTo1D(blockID)] == 0;
+
+		
+	for (uint i = 0; i < NR_OF_FACES_PER_CUBE; i++)
+	{
+		uint faceIndex = Convert3DIndexTo1D(blockID) * NR_OF_FACES_PER_CUBE + i;
+		
+
+		if (isEmptyBlock)
+		{
+			_FaceIndexBuffer[faceIndex] = -1;		
+		}
+		else
+		{
+			_FaceIndexBuffer[faceIndex] = ShouldFaceBeRendered(blockID, CUBE_FACE_NORMALS[i]) ? faceIndex : -1;
+		}
+	}
+}

@@ -1,0 +1,71 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+#include "TerrainGenerator.cginc" 
+#include "BlockTypes.cginc" 
+
+RWStructuredBuffer<uint> _BlockBuffer;
+cbuffer _PositionBuffer
+{
+	float4 chunkPos;
+};
+
+
+
+
+[numthreads(32, 1, 32)]
+void CSMain(uint3 groupdID : SV_GroupID, uint3 threadID : SV_DispatchThreadID)
+{
+	//uint3 blockID = uint3(groupdID.x, threadID.y, threadID.z);
+
+	/*float3 blockPos = chunkPos.xyz + blockID + uint3(1000, 1000, 1000);
+	bool isSolid = Get3DPerlinNoise(blockPos);*/
+
+	uint3 block3DID = 0;
+	uint blockID = 0;
+	uint depth = 100;
+	uint dirtDepth = 3;
+	for (int y = 31; y >= 0; y--)
+	{
+		block3DID = uint3(threadID.x, y, threadID.z);
+		blockID = Convert3DIndexTo1D(block3DID);
+		if (y == 31 && _BlockBuffer[blockID] != BLOCK_AIR)
+		{
+			uint3 otherBlockPos = chunkPos.xyz + block3DID + uint3(1000, 1001, 1000);
+			bool isSolid = Get3DPerlinNoise(otherBlockPos);
+			if (isSolid == false)
+			{
+				_BlockBuffer[blockID] = BLOCK_DIRT_GRASS;
+				depth = 100;
+			}
+		}
+		else
+		{
+			if (_BlockBuffer[blockID] == BLOCK_AIR)
+			{
+				depth = 0;
+				continue;
+			}
+
+			if (depth == 0)
+			{
+				_BlockBuffer[blockID] = BLOCK_DIRT_GRASS;
+			}
+			else if (depth < dirtDepth)
+			{
+				_BlockBuffer[blockID] = BLOCK_DIRT;
+			}
+
+			depth++;
+
+		}
+
+
+
+
+
+	}
+
+
+
+
+}
